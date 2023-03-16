@@ -368,7 +368,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 }  
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-  printf("hehe");
+  
 }
 /*
  tao bien so vong quay, lay so vong quay la position can dien vao GUI, sovongquay =
