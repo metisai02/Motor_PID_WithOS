@@ -1,1 +1,2 @@
-../Mylib/stringCut.c:21:7:string_cut	32	static
+../Mylib/stringCut.c:23:7:string_cut	40	static
+../Mylib/stringCut.c:79:5:string_cut_checkMode	48	static
