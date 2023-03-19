@@ -249,11 +249,20 @@ void PWM_control_velocity(TIM_HandleTypeDef *htim, float duty)
 
 void encoder()
 {
-  instance_enc.speed_by_encoder = htim2.Instance->CNT - instance_enc.pre_speed_by_encoder;
-  //	htim2.Instance->CNT = 0;
-  instance_enc.pre_speed_by_encoder = htim2.Instance->CNT;
-  //	instance_enc.speed_by_encoder = htim2.Instance->CNT;
-  instance_enc.position += instance_enc.speed_by_encoder;
+  if (data_recFromPC[0] == 'R')
+  {
+    htim2.Instance->CNT = 0;
+    instance_enc.speed_by_encoder = 0;
+    instance_enc.pre_speed_by_encoder = 0;
+  }
+  else
+  {
+    instance_enc.speed_by_encoder = htim2.Instance->CNT - instance_enc.pre_speed_by_encoder;
+    //	htim2.Instance->CNT = 0;
+    instance_enc.pre_speed_by_encoder = htim2.Instance->CNT;
+    //	instance_enc.speed_by_encoder = htim2.Instance->CNT;
+    instance_enc.position += instance_enc.speed_by_encoder;
+  }
   //	htim2.Instance->CNT = 0;
 }
 // void control_PID_velocity(PID_control *pid_tune, float setpoint, float Kp, float Ki, float Kd)
@@ -313,13 +322,13 @@ void control_PID_Position(PID_control *pid_tune, float setpoint_posi_rotation, f
   //	}
   pid_tune->D_part = (error_posi - pre_error_posi) / Ts;
   output_pid = Kp * (pid_tune->P_part) + Ki * (pid_tune->I_part) + Kd * (pid_tune->D_part);
-  if (output_pid > 90.0)
+  if (output_pid > 100.0)
   {
-    output_pid = 90.0;
+    output_pid = 100.0;
   }
-  else if (output_pid < -90)
+  else if (output_pid < -100)
   {
-    output_pid = -90.0;
+    output_pid = -100.0;
   }
   //	else if(output_pid < 0)
   //	{
@@ -336,13 +345,13 @@ void control_PID_Velocity(PID_control *pid_tune, float setpoint_velo, float Kp, 
   pid_tune->I_part += error_velo * Ts;
   pid_tune->D_part = (error_velo - pre_error_velo) / Ts;
   output_pid = Kp * (pid_tune->P_part) + Ki * (pid_tune->I_part) + Kd * (pid_tune->D_part);
-  if (output_pid > 90.0)
+  if (output_pid > 100.0)
   {
-    output_pid = 90.0;
+    output_pid = 100.0;
   }
-  else if (output_pid < -90)
+  else if (output_pid < -100)
   {
-    output_pid = -90.0;
+    output_pid = -100.0;
   }
   pre_error_velo = error_velo;
 }
@@ -478,9 +487,21 @@ int main(void)
       else if (data_recFromPC[0] == 'R')
       {
         Kp_true = Ki_true = Kd_true = 0; // nhan nut Reset
-        checkModeFromQt = 0;
-        HAL_GPIO_WritePin(IN1_GPIO_Port, IN1_Pin, GPIO_PIN_SET);
+        htim2.Instance->CNT = 0;
+        instance_enc.position = 0;
+        instance_enc.speed_by_encoder = 0;
+        setpointQt = 0;
+        if (checkModeFromQt == 1)
+        {
+          control_PID_Position(&PID_contr, setpointQt, Kp_true, Ki_true, Kd_true);
+        }
+        else if (checkModeFromQt == 2)
+        {
+          control_PID_Velocity(&PID_contr, setpointQt, Kp_true, Ki_true, Kd_true);
+        }
+        HAL_GPIO_WritePin(IN1_GPIO_Port, IN1_Pin, GPIO_PIN_SET); // ko co cai nay dong co no chi dung lai thui chu ko co het keu :)))
         HAL_GPIO_WritePin(IN2_GPIO_Port, IN2_Pin, GPIO_PIN_SET);
+        checkModeFromQt = 0; // do co ham nay = 0, nen phai set output_pid ve 0 luon do no ko nhay vo ham tinh output_pid tu Kp Ki Kd
         flagAccept = 0;
       }
 
