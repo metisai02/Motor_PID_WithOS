@@ -302,7 +302,7 @@ void send_data_to_Qt()
     HAL_UART_Transmit(&huart1, (uint8_t *)sendDataToSTM, strlen(sendDataToSTM), 500);
   }
 }
-void control_PID_Position(PID_control *pid_tune, float setpoint_posi_rotation, float Kp, float Ki, float Kd) // moi chi dieu khien duoc toc do dong co
+void control_PID_Position(PID_control *pid_tune, float setpoint_posi_rotation, float Kp, float Ki, float Kd) 
 {
   //	instance_enc.velocity_not = instance_enc.velocity;
   //	if(instance_enc.velocity_not < 0)
