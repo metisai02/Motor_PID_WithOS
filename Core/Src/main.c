@@ -22,7 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "stringCut.h"
-
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -33,7 +33,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define Pulseee 1980.0 // 11 vong/phut * 45 (ti so truyen 1:45) *  4 (2 canh xung A va B)
-#define Ts 0.05
+#define Ts 0.02
 // #define PULSE_PER_REVOLUTION  19800
 // #define TIME_INTERVAL         0.01f    // Sampling time in seconds
 /* USER CODE END PD */
@@ -65,16 +65,17 @@ static void MX_TIM2_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
-float position, output_pid;
+float position, output_pid, output_pid_velo, output_pid_posi;
 float error_posi = 0, pre_error_posi = 0;
 float error_velo = 0, pre_error_velo = 0;
-volatile short now_counter = 0;
-volatile int32_t motor_position;
-float now_position, now_position1, now_encoder_speed, setpoint_posi_degrees;
+float now_position, now_encoder_speed, setpoint_posi_degrees;
 float number_rotation, velocity_real;
 float Kp_true, Ki_true, Kd_true; // truyen tu GUI xuong
 uint8_t flagAccept = 0;          // neu bang 1 thi cho phep dong co chay
 uint8_t checkModeFromQt = 0;
+uint8_t count_PID = 0;
+uint8_t countUpdate = 0;
+bool count_PID_position_first_time = true;
 typedef struct
 {
   float P_part;
@@ -178,7 +179,6 @@ void PWM_control_velocity(TIM_HandleTypeDef *htim, float duty)
     HAL_GPIO_WritePin(IN1_GPIO_Port, IN1_Pin, GPIO_PIN_SET);
     HAL_GPIO_WritePin(IN2_GPIO_Port, IN2_Pin, GPIO_PIN_RESET); // chieu thuan cung chieu kim dong ho
     htim1.Instance->CCR3 = duty * (htim1.Instance->ARR) / 100;
-    ;
   }
   else if (duty < 0)
   {
@@ -302,7 +302,7 @@ void send_data_to_Qt()
     HAL_UART_Transmit(&huart1, (uint8_t *)sendDataToSTM, strlen(sendDataToSTM), 200);
   }
 }
-void control_PID_Position(PID_control *pid_tune, float setpoint_posi_rotation, float Kp, float Ki, float Kd) 
+void control_PID_Position(PID_control *pid_tune, float setpoint_posi_rotation, float Kp, float Ki, float Kd)
 {
   //	instance_enc.velocity_not = instance_enc.velocity;
   //	if(instance_enc.velocity_not < 0)
@@ -321,14 +321,14 @@ void control_PID_Position(PID_control *pid_tune, float setpoint_posi_rotation, f
   //		pid_tune->I_part = 0;
   //	}
   pid_tune->D_part = (error_posi - pre_error_posi) / Ts;
-  output_pid = Kp * (pid_tune->P_part) + Ki * (pid_tune->I_part) + Kd * (pid_tune->D_part);
-  if (output_pid > 100.0)
+  output_pid_posi = Kp * (pid_tune->P_part) + Ki * (pid_tune->I_part) + Kd * (pid_tune->D_part);
+  if (output_pid_posi > 100.0)
   {
-    output_pid = 100.0;
+    output_pid_posi = 100.0;
   }
-  else if (output_pid < -100)
+  else if (output_pid_posi < -100)
   {
-    output_pid = -100.0;
+    output_pid_posi = -100.0;
   }
   //	else if(output_pid < 0)
   //	{
@@ -344,34 +344,89 @@ void control_PID_Velocity(PID_control *pid_tune, float setpoint_velo, float Kp, 
   pid_tune->P_part = error_velo;
   pid_tune->I_part += error_velo * Ts;
   pid_tune->D_part = (error_velo - pre_error_velo) / Ts;
-  output_pid = Kp * (pid_tune->P_part) + Ki * (pid_tune->I_part) + Kd * (pid_tune->D_part);
-  if (output_pid > 100.0)
+  output_pid_velo = Kp * (pid_tune->P_part) + Ki * (pid_tune->I_part) + Kd * (pid_tune->D_part);
+  if (output_pid_velo > 100.0)
   {
-    output_pid = 100.0;
+    output_pid_velo = 100.0;
   }
-  else if (output_pid < -100)   
+  else if (output_pid_velo < -100)
   {
-    output_pid = -100.0;
+    output_pid_velo = -100.0;
   }
   pre_error_velo = error_velo;
 }
-void select_mode(Select_Tune select)
+
+void tune_PID_after(Select_Tune select)
 {
-  //	select_tunning select;
   switch (select)
   {
   case Select_Posi:
-    PWM_control_position(&htim1, output_pid);
-    //			sprintf(buffer, "Position is: %.3f", now_position);
-    //			HAL_UART_Receive_IT(&huart1, buffer, strlen(buffer));
-    break;
+    if (count_PID_position_first_time == true)
+    {
+      control_PID_Position(&PID_contr, setpointQt, Kp_true, Ki_true, Kd_true);      // theo độ, tinh o lan dau vua moi chay dong co 1 lan duy nhat
+      control_PID_Velocity(&PID_contr, output_pid_posi, Kp_true, Ki_true, Kd_true); // setpoint cua speed bang voi output cua position
+      output_pid = output_pid_velo;
+      PWM_control_position(&htim1, output_pid);
+      count_PID_position_first_time = false;
+      break;
+    }
+    if (count_PID == 3) // 5 lan tinh PID toc do moi tinh 1 lan PID vi tri
+    {
+      if (countUpdate == 250)
+      {
+        setpointQt += 10;
+        countUpdate = 0;
+      }
+      control_PID_Position(&PID_contr, setpointQt, Kp_true, Ki_true, Kd_true);      // tinh lai output_pid_posi moi
+      control_PID_Velocity(&PID_contr, output_pid_posi, Kp_true, Ki_true, Kd_true); // setpoint cua speed bang voi output cua position
+      output_pid = output_pid_velo;
+      PWM_control_position(&htim1, output_pid);
+      count_PID = 0;
+      break;
+    }
+    else if (count_PID != 3)
+    {
+      if (countUpdate == 250)
+      {
+        setpointQt += 10;
+        countUpdate = 0;
+      }
+      control_PID_Velocity(&PID_contr, output_pid_posi, Kp_true, Ki_true, Kd_true); // setpoint cua speed bang voi output cua position
+      output_pid = output_pid_velo;
+      PWM_control_position(&htim1, output_pid);
+      break;
+    }
   case Select_Velo:
+    if (countUpdate == 250)
+    {
+      setpointQt += 10;
+      countUpdate = 0;
+    }
+    control_PID_Velocity(&PID_contr, setpointQt, Kp_true, Ki_true, Kd_true);
+    output_pid = output_pid_velo; // dong nhat het ve output_pid cho de kiem soat @_@
     PWM_control_velocity(&htim1, output_pid);
     break;
   default:
     break;
   }
 }
+// void select_mode(Select_Tune select)
+// {
+//   //	select_tunning select;
+//   switch (select)
+//   {
+//   case Select_Posi:
+//     PWM_control_position(&htim1, output_pid);
+//     //			sprintf(buffer, "Position is: %.3f", now_position);
+//     //			HAL_UART_Receive_IT(&huart1, buffer, strlen(buffer));
+//     break;
+//   case Select_Velo:
+//     PWM_control_velocity(&htim1, output_pid);
+//     break;
+//   default:
+//     break;
+//   }
+// }
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if (htim->Instance == TIM3)
@@ -382,14 +437,16 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
   if (checkModeFromQt == 1 && flagAccept == 1)
   {
-    control_PID_Position(&PID_contr, setpointQt, Kp_true, Ki_true, Kd_true); // theo độ
-    select_mode(Select_Posi);
+    count_PID++;
+    countUpdate++;
+    tune_PID_after(Select_Posi);
   }
   else if (checkModeFromQt == 2 && flagAccept == 1)
   {
-    control_PID_Velocity(&PID_contr, setpointQt, Kp_true, Ki_true, Kd_true);
-//	  control_PID_Velocity(&PID_contr, 30, 0.7, 1.9, 0.04);
-    select_mode(Select_Velo);
+    // control_PID_Velocity(&PID_contr, setpointQt, Kp_true, Ki_true, Kd_true);
+    //	  control_PID_Velocity(&PID_contr, 30, 0.7, 1.9, 0.04);
+    countUpdate++;
+    tune_PID_after(Select_Velo);
   }
   send_data_to_Qt();
   //  	control_PID_Velocity(&PID_contr, 40, Kp_true, Kd_true, Ki_true); // toc do 30vong/phut
@@ -420,9 +477,9 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 /* USER CODE END 0 */
 
 /**
-  * @brief  The application entry point.
-  * @retval int
-  */
+ * @brief  The application entry point.
+ * @retval int
+ */
 int main(void)
 {
   /* USER CODE BEGIN 1 */
@@ -500,12 +557,12 @@ int main(void)
         {
           control_PID_Velocity(&PID_contr, setpointQt, Kp_true, Ki_true, Kd_true);
         }
+        output_pid = 0;
         HAL_GPIO_WritePin(IN1_GPIO_Port, IN1_Pin, GPIO_PIN_SET); // ko co cai nay dong co no chi dung lai thui chu ko co het keu :)))
         HAL_GPIO_WritePin(IN2_GPIO_Port, IN2_Pin, GPIO_PIN_SET);
         checkModeFromQt = 0; // do co ham nay = 0, nen phai set output_pid ve 0 luon do no ko nhay vo ham tinh output_pid tu Kp Ki Kd
         flagAccept = 0;
       }
-
       memset(data_uart, 0, uart_count);
       //      uart_count = 0;
       uart_flag = 0;
@@ -519,17 +576,17 @@ int main(void)
 }
 
 /**
-  * @brief System Clock Configuration
-  * @retval None
-  */
+ * @brief System Clock Configuration
+ * @retval None
+ */
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
   /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
+   * in the RCC_OscInitTypeDef structure.
+   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
@@ -542,9 +599,8 @@ void SystemClock_Config(void)
   }
 
   /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+   */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
@@ -557,10 +613,10 @@ void SystemClock_Config(void)
 }
 
 /**
-  * @brief I2C1 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief I2C1 Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_I2C1_Init(void)
 {
 
@@ -587,14 +643,13 @@ static void MX_I2C1_Init(void)
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
-
 }
 
 /**
-  * @brief TIM1 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief TIM1 Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_TIM1_Init(void)
 {
 
@@ -656,14 +711,13 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 2 */
   HAL_TIM_MspPostInit(&htim1);
-
 }
 
 /**
-  * @brief TIM2 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief TIM2 Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_TIM2_Init(void)
 {
 
@@ -705,14 +759,13 @@ static void MX_TIM2_Init(void)
   /* USER CODE BEGIN TIM2_Init 2 */
 
   /* USER CODE END TIM2_Init 2 */
-
 }
 
 /**
-  * @brief TIM3 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief TIM3 Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_TIM3_Init(void)
 {
 
@@ -750,14 +803,13 @@ static void MX_TIM3_Init(void)
   /* USER CODE BEGIN TIM3_Init 2 */
 
   /* USER CODE END TIM3_Init 2 */
-
 }
 
 /**
-  * @brief USART1 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief USART1 Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_USART1_UART_Init(void)
 {
 
@@ -783,36 +835,35 @@ static void MX_USART1_UART_Init(void)
   /* USER CODE BEGIN USART1_Init 2 */
 
   /* USER CODE END USART1_Init 2 */
-
 }
 
 /**
-  * @brief GPIO Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief GPIO Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-/* USER CODE BEGIN MX_GPIO_Init_1 */
-/* USER CODE END MX_GPIO_Init_1 */
+  /* USER CODE BEGIN MX_GPIO_Init_1 */
+  /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, IN1_Pin|IN2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, IN1_Pin | IN2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : IN1_Pin IN2_Pin */
-  GPIO_InitStruct.Pin = IN1_Pin|IN2_Pin;
+  GPIO_InitStruct.Pin = IN1_Pin | IN2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-/* USER CODE BEGIN MX_GPIO_Init_2 */
-/* USER CODE END MX_GPIO_Init_2 */
+  /* USER CODE BEGIN MX_GPIO_Init_2 */
+  /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
@@ -820,9 +871,9 @@ static void MX_GPIO_Init(void)
 /* USER CODE END 4 */
 
 /**
-  * @brief  This function is executed in case of error occurrence.
-  * @retval None
-  */
+ * @brief  This function is executed in case of error occurrence.
+ * @retval None
+ */
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
@@ -834,14 +885,14 @@ void Error_Handler(void)
   /* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
-  * @retval None
-  */
+ * @brief  Reports the name of the source file and the source line number
+ *         where the assert_param error has occurred.
+ * @param  file: pointer to the source file name
+ * @param  line: assert_param error line source number
+ * @retval None
+ */
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
