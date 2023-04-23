@@ -1,0 +1,2 @@
+../Mylib/uart_proto.c:4:8:UART_get_data	56	static
+../Mylib/uart_proto.c:58:6:UART_frame_data	40	static

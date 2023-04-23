@@ -5,13 +5,19 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
-../Mylib/stringCut.c 
+../Mylib/crc16.c \
+../Mylib/stringCut.c \
+../Mylib/uart_proto.c 
 
 OBJS += \
-./Mylib/stringCut.o 
+./Mylib/crc16.o \
+./Mylib/stringCut.o \
+./Mylib/uart_proto.o 
 
 C_DEPS += \
-./Mylib/stringCut.d 
+./Mylib/crc16.d \
+./Mylib/stringCut.d \
+./Mylib/uart_proto.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes
@@ -21,7 +27,7 @@ Mylib/%.o Mylib/%.su Mylib/%.cyclo: ../Mylib/%.c Mylib/subdir.mk
 clean: clean-Mylib
 
 clean-Mylib:
-	-$(RM) ./Mylib/stringCut.cyclo ./Mylib/stringCut.d ./Mylib/stringCut.o ./Mylib/stringCut.su
+	-$(RM) ./Mylib/crc16.cyclo ./Mylib/crc16.d ./Mylib/crc16.o ./Mylib/crc16.su ./Mylib/stringCut.cyclo ./Mylib/stringCut.d ./Mylib/stringCut.o ./Mylib/stringCut.su ./Mylib/uart_proto.cyclo ./Mylib/uart_proto.d ./Mylib/uart_proto.o ./Mylib/uart_proto.su
 
 .PHONY: clean-Mylib
 
