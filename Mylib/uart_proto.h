@@ -8,10 +8,10 @@
 #include "stdint.h"
 
 #define		PROTO_DATA_SIZE_TX	5 // 4 byte data + 1 byte mode
-#define		PROTO_DATA_SIZE_RX	13 // 4 byte data * 3 + 1 byte mode
-//#define		PROTO_DATA_SIZE_RX	6
-#define		PROTO_BUFF_SIZE_TX	PROTO_DATA_SIZE_TX+4
-#define		PROTO_BUFF_SIZE_RX	PROTO_DATA_SIZE_RX+4
+//#define		PROTO_DATA_SIZE_RX	13 // 4 byte data * 3 + 1 byte mode
+#define		PROTO_DATA_SIZE_RX	13
+#define		PROTO_BUFF_SIZE_TX	PROTO_DATA_SIZE_TX*2+4
+#define		PROTO_BUFF_SIZE_RX	PROTO_DATA_SIZE_RX*2+4
 
 #define   PROTO_START_BYTE        0x02 // STX
 #define   PROTO_ESC_BYTE          0x7E
@@ -21,10 +21,17 @@ typedef struct
 {
 	uint8_t au8TxBuffer[PROTO_BUFF_SIZE_TX];
 	uint8_t au8RxBuffer[PROTO_BUFF_SIZE_RX];
-	_Bool bRxCpltflag;
-	_Bool bTxCpltflag;
-	int8_t i8ErrorCode;
 } uart_proto_handle_t;
+
+//uint8_t data_after_cut[PROTO_DATA_SIZE_RX];
+
+typedef enum
+{
+     Phuc_buffer_small = -3,
+     Phuc_false_CRC = -2,
+     Phuc_no_valid = -1,
+     Phuc_right = 2
+}check_Phuc;
 
 /**********************************************************
 * Function Name: UART_get_data
@@ -33,7 +40,7 @@ typedef struct
 *						 dest, dest_led - destination for valid data receive
 * Return value: errorcode
 **********************************************************/
-int8_t UART_get_data(uart_proto_handle_t *uart, uint8_t *pu8Dest, uint16_t *pu16Dest_len);
+int8_t UART_get_data(uint8_t *pu8Src, uint16_t u16Src_len, uint8_t *pu8Dest, uint16_t *pu16Dest_len);
 
 /**********************************************************
 * Function Name: UART_frame_data
@@ -42,8 +49,7 @@ int8_t UART_get_data(uart_proto_handle_t *uart, uint8_t *pu8Dest, uint16_t *pu16
 *						 pu8Src, pu16Scr_len - Source data for transmission
 * Return value: errorcode
 **********************************************************/
-void UART_frame_data(uart_proto_handle_t *uart, uint8_t *pu8Src, uint16_t u16Src_len,
-	uint8_t *pu8Dest, uint16_t *pu16Dest_len);
+void UART_frame_data(uint8_t *pu8Src, uint8_t u8Src_len, uint8_t *pu8Dest, uint16_t *pu16Dest_len);
 
 #ifdef __cplusplus
 }

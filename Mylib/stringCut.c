@@ -4,6 +4,7 @@
  *  Created on: Mar 16, 2023
  *      Author: Admin
  */
+
 #include "stringCut.h"
 //
 //
@@ -16,10 +17,11 @@ float number_k = 0.0f;
 float number_div = 0.0f;
 float number_add = 0.0f;
 float number_real = 0.0f;
-char data_recFromPC[50] = {0};
+
 char data_sendtoPC[50] = {0};
 char data_recFromPCMode[30] = {0};
 char sendDataToSTM[100] = {0};
+/*
 float string_cut(char *buff_receiveFromPC, char *this_want)
 {
   char *pwant = strstr(buff_receiveFromPC, this_want);
@@ -144,3 +146,4 @@ int string_cut_checkMode(char *buff_receiveFromPC)
   setpointQt = (flagAmDuong)*number_real;
   return checkMode; // Mode velo or posi
 }
+*/

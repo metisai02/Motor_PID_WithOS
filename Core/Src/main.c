@@ -23,8 +23,8 @@
 /* USER CODE BEGIN Includes */
 #include "stringCut.h"
 #include "stdbool.h"
-#include <crc16.h>
-#include <uart_proto.h>
+#include "crc16.h"
+#include "uart_proto.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -81,6 +81,7 @@ uint8_t checkModeFromQt = 0;
 uint8_t count_PID = 0;
 uint8_t countUpdate = 0;
 bool count_PID_position_first_time = true;
+uint8_t data_after_cut[PROTO_DATA_SIZE_RX];
 typedef struct
 {
   float P_part;
@@ -263,11 +264,11 @@ void PWM_control_velocity(TIM_HandleTypeDef *htim, float duty)
 
 void encoder()
 {
-  if (data_recFromPC[0] == 0x44)
+  if (data_after_cut[0] == 0x44)
   {
     htim2.Instance->CNT = 0;
     instance_enc.speed_by_encoder = 0;
-    instance_enc.pre_speed_by_encoder = 0;
+    instance_enc.pre_speed_by_encoder = 0; 
   }
   else
   {
@@ -312,12 +313,7 @@ void send_data_to_Qt()
 //    HAL_UART_Transmit(&huart1, (uint8_t *)sendDataToSTM, strlen(sendDataToSTM), 200);
 	  char float_to_char[sizeof(float)];
 	  char mode = 0x66;
-	  char so1 = 0x23;
-	  char so2 = 0x02;
-	  char so3 = 0x45;
-	  char so4 = 0x03;
-	  char so5 = 0x04;
-//	  now_position = 15.23;   // ms sua de
+	  now_position = 15.23;   // ms sua de
 	  count_test++;
 	  if(count_test == 200)
 	  {
@@ -325,51 +321,36 @@ void send_data_to_Qt()
 		  count_test = 0;
 	  }
 	  memcpy(float_to_char, &now_position1, sizeof(float));  // real thi bo so 1 ra
-//	  uint8_t *array_data;
-//	  array_data = (uint8_t *)malloc(5);
+	  uint8_t *array_data;
+	  array_data = (uint8_t *)malloc(5);
 	  uint8_t index = 0;
-	  uint8_t *mang;
-	  mang = (uint8_t *)malloc(6);
-//	  memcpy(array_data + index, &mode, 1); // Mode la 0x66 , neu Qt nhan 0x66 la vi tri
-//	  index += 1;
-	  memcpy(mang + index, &mode, 1);
+	  memcpy(array_data + index, &mode, 1); // Mode la 0x66 , neu Qt nhan 0x66 la vi tri
 	  index += 1;
-	  memcpy(mang + index, &so1, 1);
-	  	  index += 1;
-	  memcpy(mang + index, &so2, 1);
-	  		index += 1;
-	  memcpy(mang + index, &so3, 1);
-	  		index += 1;
-	  memcpy(mang + index, &so4, 1);
-	  		index += 1;
-	  memcpy(mang + index, &so5, 1);
-	  		index += 1;
-//	  memcpy(array_data + index, float_to_char, 4);
+	  memcpy(array_data + index, float_to_char, 4);
 //	  char mang[] = {0x53, 0x53, 0x22, 0x02, 0x65};
-//	  UART_frame_data(&uart_here, array_data, PROTO_DATA_SIZE_TX, uart_here.au8TxBuffer, &frame_tx_lenght);
-	  UART_frame_data(&uart_here, (uint8_t *)mang, PROTO_DATA_SIZE_TX + 1, uart_here.au8TxBuffer, &frame_tx_lenght);
+	  UART_frame_data(array_data, PROTO_DATA_SIZE_TX, uart_here.au8TxBuffer, &frame_tx_lenght);
+//	  UART_frame_data((uint8_t *)mang, PROTO_DATA_SIZE_TX, uart_here.au8TxBuffer, &frame_tx_lenght);
 //	  UART_get_data(&uart_here, uart_here.au8TxBuffer, &get_data_lenght);
 	  HAL_UART_Transmit_DMA(&huart1, uart_here.au8TxBuffer, frame_tx_lenght);
-//	  free(array_data);
-	  free(mang);
+	  free(array_data);
   }
   else if (checkModeFromQt == 2 && flagAccept == 1)
   {
 //    sprintf(sendDataToSTM, "%f ", velocity_real);
 //    HAL_UART_Transmit(&huart1, (uint8_t *)sendDataToSTM, strlen(sendDataToSTM), 200);
 	  char float_to_char[sizeof(float)];
-	  	  char mode = 0x77;
-//	  	  velocity_real = 20.23;
-	  	  memcpy(float_to_char, &velocity_real, sizeof(float));
-	  	  uint8_t *array_data;
-	  	  array_data = (uint8_t *)malloc(5);
-	  	  uint8_t index = 0;
-	  	  memcpy(array_data + index, &mode, 1); // Mode la 0x77 , neu Qt nhan 0x77 la velocity
-	  	  index += 1;
-	  	  memcpy(array_data + index, float_to_char, 4);
-	  	  UART_frame_data(&uart_here, array_data, PROTO_DATA_SIZE_TX, uart_here.au8TxBuffer, &frame_tx_lenght);
-	  	  HAL_UART_Transmit_DMA(&huart1, uart_here.au8TxBuffer, frame_tx_lenght);
-	  	  free(array_data);
+	  char mode = 0x77;
+	  velocity_real = 20.23;
+	  memcpy(float_to_char, &velocity_real, sizeof(float));
+	  uint8_t *array_data;
+	  array_data = (uint8_t *)malloc(5);
+	  uint8_t index = 0;
+	  memcpy(array_data + index, &mode, 1); // Mode la 0x77 , neu Qt nhan 0x77 la velocity
+	  index += 1;
+	  memcpy(array_data + index, float_to_char, 4);
+	  UART_frame_data(array_data, PROTO_DATA_SIZE_TX, uart_here.au8TxBuffer, &frame_tx_lenght);
+	  HAL_UART_Transmit_DMA(&huart1, uart_here.au8TxBuffer, frame_tx_lenght);
+	  free(array_data);
   }
 }
 void control_PID_Position(PID_control *pid_tune, float setpoint_posi_rotation, float Kp, float Ki, float Kd)
@@ -480,23 +461,6 @@ void tune_PID_after(Select_Tune select)
     break;
   }
 }
-// void select_mode(Select_Tune select)
-// {
-//   //	select_tunning select;
-//   switch (select)
-//   {
-//   case Select_Posi:
-//     PWM_control_position(&htim1, output_pid);
-//     //			sprintf(buffer, "Position is: %.3f", now_position);
-//     //			HAL_UART_Receive_IT(&huart1, buffer, strlen(buffer));
-//     break;
-//   case Select_Velo:
-//     PWM_control_velocity(&htim1, output_pid);
-//     break;
-//   default:
-//     break;
-//   }
-// }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
@@ -598,12 +562,15 @@ int main(void)
     //	  HAL_GPIO_WritePin(IN1_GPIO_Port,IN1_Pin,GPIO_PIN_SET);
     //	  HAL_GPIO_WritePin(IN2_GPIO_Port,IN2_Pin,GPIO_PIN_RESET); chieu thuan cung chieu kim dong ho day!!!
     real_data = 1;
+//    checkModeFromQt = 1;
+//    flagAccept = 1;
+//    send_data_to_Qt();
     if (uart_flag == 1)
     {
-      memset(data_recFromPC, 0, uart_count);
+      memset(data_after_cut, 0, uart_count);
       //    memset(uart_here.au8RxBuffer, 0, PROTO_DATA_SIZE_RX+4);
       memcpy(uart_here.au8RxBuffer, (uint8_t *)data_uart, uart_count);
-      check_true_false = UART_get_data(&uart_here, (uint8_t *)data_recFromPC, &get_data_lenght); // sau ham nay data_recfromPC se chua cac data byte cua Kp Ki Kd
+      check_true_false = UART_get_data(uart_here.au8RxBuffer, uart_count, data_after_cut, &get_data_lenght); // sau ham nay data_after_cut se chua cac data byte cua Kp Ki Kd
  //     char message[] = {0};
       if (check_true_false == -1)
       {
@@ -630,38 +597,38 @@ int main(void)
       {
         while (1) // neu toi duoc day thi đã nhận đúng data rồi
         {
-          //   strcpy(data_recFromPC, data_uart);
-          if (data_recFromPC[0] == 0x22) // 'S' la set a' :))
+          //   strcpy(data_after_cut, data_uart);
+          if (data_after_cut[0] == 0x22) // 'S' la set a' :))
           {
-            //  checkModeFromQt = string_cut_checkMode(data_recFromPC);
-            setpointQt = *((float *)(data_recFromPC + 1));
+            //  checkModeFromQt = string_cut_checkMode(data_after_cut);
+            setpointQt = *((float *)(data_after_cut + 1));
             checkModeFromQt = 1;
             break;
           }
-          else if (data_recFromPC[0] == 0x33) // 'S' la set a' :))
+          else if (data_after_cut[0] == 0x33) // 'S' la set a' :))
           {
 
-            setpointQt = *((float *)(data_recFromPC + 1));
+            setpointQt = *((float *)(data_after_cut + 1));
             checkModeFromQt = 2;
             break;
           }
-          else if (data_recFromPC[0] == 0x55) // G la GOOOO!!! a' :)), nhap nut RUN trong GUI thi gửi chữ 'G'
+          else if (data_after_cut[0] == 0x55) // G la GOOOO!!! a' :)), nhap nut RUN trong GUI thi gửi chữ 'G'
           {
             flagAccept = 1;
             break;
           }
-          //      else if (data_recFromPC[0] == 'K')
-          else if (data_recFromPC[0] == 0x11)
+          //      else if (data_after_cut[0] == 'K')
+          else if (data_after_cut[0] == 0x11)
           {
-            //        Kp_true = string_cut(data_recFromPC, "Kp");
-            //        Ki_true = string_cut(data_recFromPC, "Ki");
-            //        Kd_true = string_cut(data_recFromPC, "Kd");
-            Kp_true = *((float *)(data_recFromPC + 1));
-            Ki_true = *((float *)(data_recFromPC + 5));
-            Kd_true = *((float *)(data_recFromPC + 9));
+            //        Kp_true = string_cut(data_after_cut, "Kp");
+            //        Ki_true = string_cut(data_after_cut, "Ki");
+            //        Kd_true = string_cut(data_after_cut, "Kd");
+            Kp_true = *((float *)(data_after_cut + 1));
+            Ki_true = *((float *)(data_after_cut + 5));
+            Kd_true = *((float *)(data_after_cut + 9));
             break;
           }
-          else if (data_recFromPC[0] == 0x44)
+          else if (data_after_cut[0] == 0x44)
           {
             Kp_true = Ki_true = Kd_true = 0; // nhan nut Reset
             htim2.Instance->CNT = 0;
