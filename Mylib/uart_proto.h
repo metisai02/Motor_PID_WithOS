@@ -27,8 +27,9 @@ typedef struct
 
 typedef enum
 {
-     Phuc_buffer_small = -3,
-     Phuc_false_CRC = -2,
+	 Phuc_false_lenght_data = -4,
+     Phuc_buffer_small,
+     Phuc_false_CRC,
      Phuc_no_valid = -1,
      Phuc_right = 2
 }check_Phuc;

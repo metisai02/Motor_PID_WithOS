@@ -34,7 +34,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define Pulseee 1980.0 // 11 vong/phut * 45 (ti so truyen 1:45) *  4 (2 canh xung A va B)
+// #define Pulseee 1980.0 // 11 vong/phut * 45 (ti so truyen 1:45) *  4 (2 canh xung A va B)
+#define Pulseee 1320.0f
 #define Ts 0.01
 // #define PULSE_PER_REVOLUTION  19800
 // #define TIME_INTERVAL         0.01f    // Sampling time in seconds
@@ -114,20 +115,34 @@ uint8_t count_test = 0;
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-typedef enum
-{
-  RR_MOTOR,
-  NRR_MOTOR,
-  STOP_MOTOR
-} motor_status;
-motor_status motor;
+// typedef enum
+//{
+//   RR_MOTOR,
+//   NRR_MOTOR,
+//   STOP_MOTOR
+// } motor_status;
+// motor_status motor;
 
 typedef enum
 {
   Select_Velo,
   Select_Posi,
 } Select_Tune;
-static float now_position1 = 15.23;
+typedef enum
+{
+  Select_PID1 = 2,
+  Select_PID2,
+} Select_PID;
+Select_PID choose_PID;
+typedef struct
+{
+	float LPF_output;
+	float pre_LPF_output;
+} LPF_parameters;
+LPF_parameters LPF_para;
+
+// static float now_position1 = 15.23;
+// static float velocity_real1 = 21.23;
 void send_data_to_Qt();
 // Select_Tune select_tunning;
 // void motor_control(float check_error ,uint16_t duty)
@@ -168,8 +183,11 @@ void PWM_control_position(TIM_HandleTypeDef *htim, float duty)
   if (duty > 0)
   {
     HAL_GPIO_WritePin(IN1_GPIO_Port, IN1_Pin, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(IN2_GPIO_Port, IN2_Pin, GPIO_PIN_RESET); // chieu thuan cung chieu kim dong ho
-    htim1.Instance->CCR3 = duty * (htim1.Instance->ARR) / 100;
+    HAL_GPIO_WritePin(IN2_GPIO_Port, IN2_Pin, GPIO_PIN_RESET);   // chieu thuan cung chieu kim dong ho
+                                                                 //    htim1.Instance->CCR2 = duty * (htim1.Instance->ARR) / 100;
+                                                                 //    htim1.Instance->CCR3 = 0;
+    htim1.Instance->CCR3 = (duty) * (htim1.Instance->ARR) / 100; // nguoc chieu kim dong ho
+                                                                 //    htim1.Instance->CCR2 = 0;
 
     ;
     //		htim1.Instance->CCR3 =  duty*900/100;
@@ -179,12 +197,16 @@ void PWM_control_position(TIM_HandleTypeDef *htim, float duty)
     HAL_GPIO_WritePin(IN1_GPIO_Port, IN1_Pin, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(IN2_GPIO_Port, IN2_Pin, GPIO_PIN_SET);
     htim1.Instance->CCR3 = (-duty) * (htim1.Instance->ARR) / 100; // nguoc chieu kim dong ho
-                                                                  //		htim1.Instance->CCR3 =  -duty*900/100;
+                                                                  //    htim1.Instance->CCR2 = 0;
+                                                                  //    htim1.Instance->CCR2 = duty * (htim1.Instance->ARR) / 100;
+                                                                  //    htim1.Instance->CCR3 = 0;
   }
   else
   {
     HAL_GPIO_WritePin(IN1_GPIO_Port, IN1_Pin, GPIO_PIN_SET);
     HAL_GPIO_WritePin(IN2_GPIO_Port, IN2_Pin, GPIO_PIN_SET);
+    //	  htim1.Instance->CCR2 = 0;
+    //	  htim1.Instance->CCR3 = 0;
   }
 }
 void PWM_control_velocity(TIM_HandleTypeDef *htim, float duty)
@@ -193,18 +215,23 @@ void PWM_control_velocity(TIM_HandleTypeDef *htim, float duty)
   {
     HAL_GPIO_WritePin(IN1_GPIO_Port, IN1_Pin, GPIO_PIN_SET);
     HAL_GPIO_WritePin(IN2_GPIO_Port, IN2_Pin, GPIO_PIN_RESET); // chieu thuan cung chieu kim dong ho
-    htim1.Instance->CCR3 = duty * (htim1.Instance->ARR) / 100;
+                                                               //    htim1.Instance->CCR2 = duty * (htim1.Instance->ARR) / 100;
+                                                               //    htim1.Instance->CCR3 = 0;
+    htim1.Instance->CCR3 = (duty) * (htim1.Instance->ARR) / 100;
   }
   else if (duty < 0)
   {
     HAL_GPIO_WritePin(IN1_GPIO_Port, IN1_Pin, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(IN2_GPIO_Port, IN2_Pin, GPIO_PIN_SET);
     htim1.Instance->CCR3 = (-duty) * (htim1.Instance->ARR) / 100; // nguoc chieu kim dong ho
+                                                                  //    htim1.Instance->CCR2 = 0;
   }
   else
   {
     HAL_GPIO_WritePin(IN1_GPIO_Port, IN1_Pin, GPIO_PIN_SET);
     HAL_GPIO_WritePin(IN2_GPIO_Port, IN2_Pin, GPIO_PIN_SET);
+    //	  htim1.Instance->CCR2 = 0;
+    //	  htim1.Instance->CCR3 = 0;
   }
 }
 // void encoder(TIM_HandleTypeDef *htim, instance_encoder *encoder_value)
@@ -268,11 +295,11 @@ void encoder()
   {
     htim2.Instance->CNT = 0;
     instance_enc.speed_by_encoder = 0;
-    instance_enc.pre_speed_by_encoder = 0; 
+    instance_enc.pre_speed_by_encoder = 0;
   }
   else
   {
-    instance_enc.speed_by_encoder = htim2.Instance->CNT - instance_enc.pre_speed_by_encoder;
+    instance_enc.speed_by_encoder = htim2.Instance->CNT - instance_enc.pre_speed_by_encoder;   // so xung giua 2 lan doc encoder
     //	htim2.Instance->CNT = 0;
     instance_enc.pre_speed_by_encoder = htim2.Instance->CNT;
     //	instance_enc.speed_by_encoder = htim2.Instance->CNT;
@@ -309,50 +336,72 @@ void send_data_to_Qt()
 {
   if (checkModeFromQt == 1 && flagAccept == 1)
   {
-//    sprintf(sendDataToSTM, "%f ", now_position);
-//    HAL_UART_Transmit(&huart1, (uint8_t *)sendDataToSTM, strlen(sendDataToSTM), 200);
-	  char float_to_char[sizeof(float)];
-	  char mode = 0x66;
-	  now_position = 15.23;   // ms sua de
-	  count_test++;
-	  if(count_test == 200)
-	  {
-		  now_position1 += 5;
-		  count_test = 0;
-	  }
-	  memcpy(float_to_char, &now_position1, sizeof(float));  // real thi bo so 1 ra
-	  uint8_t *array_data;
-	  array_data = (uint8_t *)malloc(5);
-	  uint8_t index = 0;
-	  memcpy(array_data + index, &mode, 1); // Mode la 0x66 , neu Qt nhan 0x66 la vi tri
-	  index += 1;
-	  memcpy(array_data + index, float_to_char, 4);
-//	  char mang[] = {0x53, 0x53, 0x22, 0x02, 0x65};
-	  UART_frame_data(array_data, PROTO_DATA_SIZE_TX, uart_here.au8TxBuffer, &frame_tx_lenght);
-//	  UART_frame_data((uint8_t *)mang, PROTO_DATA_SIZE_TX, uart_here.au8TxBuffer, &frame_tx_lenght);
-//	  UART_get_data(&uart_here, uart_here.au8TxBuffer, &get_data_lenght);
-	  HAL_UART_Transmit_DMA(&huart1, uart_here.au8TxBuffer, frame_tx_lenght);
-	  free(array_data);
+    //    sprintf(sendDataToSTM, "%f ", now_position);
+    //    HAL_UART_Transmit(&huart1, (uint8_t *)sendDataToSTM, strlen(sendDataToSTM), 200);
+    char float_to_char[sizeof(float)];
+    char mode = 0x66;
+    //	  count_test++;
+    //	  if(count_test == 200)
+    //	  {
+    //		  now_position1 += 5;
+    //		  count_test = 0;
+    //	  }
+    //	  memcpy(float_to_char, &now_position1, sizeof(float));  // real thi bo so 1 ra
+    memcpy(float_to_char, &now_position, sizeof(float));
+    uint8_t *array_data;
+    array_data = (uint8_t *)malloc(5);
+    uint8_t index = 0;
+    memcpy(array_data + index, &mode, 1); // Mode la 0x66 , neu Qt nhan 0x66 la vi tri
+    index += 1;
+    memcpy(array_data + index, float_to_char, 4);
+    //	  char mang[] = {0x53, 0x53, 0x22, 0x02, 0x65};
+    UART_frame_data(array_data, PROTO_DATA_SIZE_TX, uart_here.au8TxBuffer, &frame_tx_lenght);
+    //	  UART_frame_data((uint8_t *)mang, PROTO_DATA_SIZE_TX, uart_here.au8TxBuffer, &frame_tx_lenght);
+    //	  UART_get_data(&uart_here, uart_here.au8TxBuffer, &get_data_lenght);
+    HAL_UART_Transmit_DMA(&huart1, uart_here.au8TxBuffer, frame_tx_lenght);
+    free(array_data);
   }
   else if (checkModeFromQt == 2 && flagAccept == 1)
   {
-//    sprintf(sendDataToSTM, "%f ", velocity_real);
-//    HAL_UART_Transmit(&huart1, (uint8_t *)sendDataToSTM, strlen(sendDataToSTM), 200);
-	  char float_to_char[sizeof(float)];
-	  char mode = 0x77;
-	  velocity_real = 20.23;
-	  memcpy(float_to_char, &velocity_real, sizeof(float));
-	  uint8_t *array_data;
-	  array_data = (uint8_t *)malloc(5);
-	  uint8_t index = 0;
-	  memcpy(array_data + index, &mode, 1); // Mode la 0x77 , neu Qt nhan 0x77 la velocity
-	  index += 1;
-	  memcpy(array_data + index, float_to_char, 4);
-	  UART_frame_data(array_data, PROTO_DATA_SIZE_TX, uart_here.au8TxBuffer, &frame_tx_lenght);
-	  HAL_UART_Transmit_DMA(&huart1, uart_here.au8TxBuffer, frame_tx_lenght);
-	  free(array_data);
+    //    sprintf(sendDataToSTM, "%f ", velocity_real);
+    //    HAL_UART_Transmit(&huart1, (uint8_t *)sendDataToSTM, strlen(sendDataToSTM), 200);
+    char float_to_char[sizeof(float)];
+    char mode = 0x77;
+    //	  velocity_real = 20.23;
+    //	  count_test++;
+    //	  	  if(count_test == 200)
+    //	  	  {
+    //	  		  velocity_real1 += 5;
+    //	  		  count_test = 0;
+    //	  	  }
+    //	  memcpy(float_to_char, &velocity_real1, sizeof(float));
+    memcpy(float_to_char, &velocity_real, sizeof(float));
+    uint8_t *array_data;
+    array_data = (uint8_t *)malloc(5);
+    uint8_t index = 0;
+    memcpy(array_data + index, &mode, 1); // Mode la 0x77 , neu Qt nhan 0x77 la velocity
+    index += 1;
+    memcpy(array_data + index, float_to_char, 4);
+    UART_frame_data(array_data, PROTO_DATA_SIZE_TX, uart_here.au8TxBuffer, &frame_tx_lenght);
+    HAL_UART_Transmit_DMA(&huart1, uart_here.au8TxBuffer, frame_tx_lenght);
+    free(array_data);
   }
 }
+
+void first_para_LPF()
+{
+	// Ham dung de khoi tao gia tri ban dau bang 0 cho cac thong so bo loc thong thap
+	LPF_para.LPF_output = 0;
+	LPF_para.pre_LPF_output = 0;
+}
+
+float update_para_LPF(float input)
+{
+	LPF_para.LPF_output = LPF_para.pre_LPF_output*0.1f + 0.9f*input;
+	LPF_para.pre_LPF_output = LPF_para.LPF_output;
+	return LPF_para.LPF_output;
+}
+
 void control_PID_Position(PID_control *pid_tune, float setpoint_posi_rotation, float Kp, float Ki, float Kd)
 {
   //	instance_enc.velocity_not = instance_enc.velocity;
@@ -360,26 +409,26 @@ void control_PID_Position(PID_control *pid_tune, float setpoint_posi_rotation, f
   //	{
   //		instance_enc.velocity_not = -instance_enc.velocity_not;   // am thi doi thanh duong cho de dung PID =))))
   //	}
-  now_position = (float)instance_enc.position * 360 / 1980; // now_position = độ
+  now_position = (float)instance_enc.position * 360 / Pulseee; // now_position = độ
   number_rotation = now_position / 360;
   //	setpoint_posi_degrees = setpoint_posi_rotation*360;   // setpoint_posi_rotation la set số vòng cho dễ set
   //	now_position1 = 0.85*now_position1 + 0.15*now_position;
   error_posi = setpoint_posi_rotation - (now_position);
   pid_tune->P_part = error_posi;
   pid_tune->I_part += error_posi * Ts;
-  //	if(error < 0.03*setpoint)
-  //	{
-  //		pid_tune->I_part = 0;
-  //	}
   pid_tune->D_part = (error_posi - pre_error_posi) / Ts;
-  output_pid_posi = Kp * (pid_tune->P_part) + Ki * (pid_tune->I_part) + Kd * (pid_tune->D_part);
-  if (output_pid_posi > 100.0)
+  if(error_posi < 0.001f*setpoint_posi_rotation)
   {
-    output_pid_posi = 100.0;
+	pid_tune->I_part = 0;
   }
-  else if (output_pid_posi < -100)
+  output_pid_posi = Kp * (pid_tune->P_part) + Ki * (pid_tune->I_part) + Kd * (pid_tune->D_part);
+  if (output_pid_posi > 90.0)
   {
-    output_pid_posi = -100.0;
+    output_pid_posi = 90.0;
+  }
+  else if (output_pid_posi < -90.0)
+  {
+    output_pid_posi = -90.0;
   }
   //	else if(output_pid < 0)
   //	{
@@ -390,24 +439,48 @@ void control_PID_Position(PID_control *pid_tune, float setpoint_posi_rotation, f
 void control_PID_Velocity(PID_control *pid_tune, float setpoint_velo, float Kp, float Ki, float Kd)
 { // velocity vong/phut
   velocity_real = (float)instance_enc.speed_by_encoder * 60.0f / (Ts * Pulseee);
+  velocity_real = update_para_LPF(velocity_real);
   error_velo = setpoint_velo - (velocity_real);
   instance_enc.velocity = velocity_real;
   pid_tune->P_part = error_velo;
   pid_tune->I_part += error_velo * Ts;
   pid_tune->D_part = (error_velo - pre_error_velo) / Ts;
+//  if(error_velo < 0.005f*setpoint_velo)
+//  {
+//	pid_tune->I_part = 0;
+//  }
   output_pid_velo = Kp * (pid_tune->P_part) + Ki * (pid_tune->I_part) + Kd * (pid_tune->D_part);
-  if (output_pid_velo > 100.0)
+  if (output_pid_velo > 90.0)
   {
-    output_pid_velo = 100.0;
+    output_pid_velo = 90.0;
   }
-  else if (output_pid_velo < -100)
+  else if (output_pid_velo < -90.0)
   {
-    output_pid_velo = -100.0;
+    output_pid_velo = -90.0;
   }
   pre_error_velo = error_velo;
 }
 
-void tune_PID_after(Select_Tune select)
+void tune_PID_after1(Select_Tune select)
+{
+  switch (select)
+  {
+  case Select_Posi:
+    control_PID_Position(&PID_contr, setpointQt, Kp_true, Ki_true, Kd_true);
+    output_pid = output_pid_posi;
+    PWM_control_position(&htim1, output_pid);
+    break;
+  case Select_Velo:
+    control_PID_Velocity(&PID_contr, setpointQt, Kp_true, Ki_true, Kd_true);
+    output_pid = output_pid_velo;
+    PWM_control_velocity(&htim1, output_pid);
+    break;
+  default:
+    break;
+  }
+}
+
+void tune_PID_after2(Select_Tune select)
 {
   switch (select)
   {
@@ -421,13 +494,13 @@ void tune_PID_after(Select_Tune select)
       count_PID_position_first_time = false;
       break;
     }
-    if (count_PID == 3) // 5 lan tinh PID toc do moi tinh 1 lan PID vi tri
+    if (count_PID == 3) // 3 lan tinh PID toc do moi tinh 1 lan PID vi tri
     {
-      if (countUpdate == 250)
-      {
-        setpointQt += 10;
-        countUpdate = 0;
-      }
+      //      if (countUpdate == 250)
+      //      {
+      //        setpointQt += 10;
+      //        countUpdate = 0;
+      //      }
       control_PID_Position(&PID_contr, setpointQt, Kp_true, Ki_true, Kd_true);      // tinh lai output_pid_posi moi
       control_PID_Velocity(&PID_contr, output_pid_posi, Kp_true, Ki_true, Kd_true); // setpoint cua speed bang voi output cua position
       output_pid = output_pid_velo;
@@ -437,22 +510,22 @@ void tune_PID_after(Select_Tune select)
     }
     else if (count_PID != 3)
     {
-      if (countUpdate == 250)
-      {
-        setpointQt += 10;
-        countUpdate = 0;
-      }
+      //      if (countUpdate == 250)
+      //      {
+      //        setpointQt += 10;
+      //        countUpdate = 0;
+      //      }
       control_PID_Velocity(&PID_contr, output_pid_posi, Kp_true, Ki_true, Kd_true); // setpoint cua speed bang voi output cua position
       output_pid = output_pid_velo;
       PWM_control_position(&htim1, output_pid);
       break;
     }
   case Select_Velo:
-//    if (countUpdate == 250)
-//    {
-//      setpointQt += 10;
-//      countUpdate = 0;
-//    }
+    //    if (countUpdate == 250)
+    //    {
+    //      setpointQt += 10;
+    //      countUpdate = 0;
+    //    }
     control_PID_Velocity(&PID_contr, setpointQt, Kp_true, Ki_true, Kd_true);
     output_pid = output_pid_velo; // dong nhat het ve output_pid cho de kiem soat @_@
     PWM_control_velocity(&htim1, output_pid);
@@ -469,19 +542,28 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     //		encoder(&htim2,&instance_enc);
     encoder();
   }
-
-  if (checkModeFromQt == 1 && flagAccept == 1)
+  if (checkModeFromQt == 1 && flagAccept == 1 && choose_PID == Select_PID1)
   {
-    count_PID++;
-    countUpdate++;
-    tune_PID_after(Select_Posi);
+    tune_PID_after1(Select_Posi);
   }
-  else if (checkModeFromQt == 2 && flagAccept == 1)
+
+  else if (checkModeFromQt == 2 && flagAccept == 1 && choose_PID == Select_PID1)
+  {
+    tune_PID_after1(Select_Velo);
+  }
+
+  else if (checkModeFromQt == 1 && flagAccept == 1 && choose_PID == Select_PID2)
+  {
+        count_PID++;
+    //    countUpdate++;
+    tune_PID_after2(Select_Posi);
+  }
+  else if (checkModeFromQt == 2 && flagAccept == 1 && choose_PID == Select_PID2)
   {
     // control_PID_Velocity(&PID_contr, setpointQt, Kp_true, Ki_true, Kd_true);
     //	  control_PID_Velocity(&PID_contr, 30, 0.7, 1.9, 0.04);
-//	countUpdate++;
-    tune_PID_after(Select_Velo);
+    //	countUpdate++;
+    tune_PID_after2(Select_Velo);
   }
   send_data_to_Qt();
   //  	control_PID_Velocity(&PID_contr, 40, Kp_true, Kd_true, Ki_true); // toc do 30vong/phut
@@ -562,36 +644,40 @@ int main(void)
     //	  HAL_GPIO_WritePin(IN1_GPIO_Port,IN1_Pin,GPIO_PIN_SET);
     //	  HAL_GPIO_WritePin(IN2_GPIO_Port,IN2_Pin,GPIO_PIN_RESET); chieu thuan cung chieu kim dong ho day!!!
     real_data = 1;
-//    checkModeFromQt = 1;
-//    flagAccept = 1;
-//    send_data_to_Qt();
+    //    checkModeFromQt = 1;
+    //    flagAccept = 1;
+    //    send_data_to_Qt();
     if (uart_flag == 1)
     {
       memset(data_after_cut, 0, uart_count);
       //    memset(uart_here.au8RxBuffer, 0, PROTO_DATA_SIZE_RX+4);
       memcpy(uart_here.au8RxBuffer, (uint8_t *)data_uart, uart_count);
       check_true_false = UART_get_data(uart_here.au8RxBuffer, uart_count, data_after_cut, &get_data_lenght); // sau ham nay data_after_cut se chua cac data byte cua Kp Ki Kd
- //     char message[] = {0};
-      if (check_true_false == -1)
+                                                                                                             //     char message[] = {0};
+      if (check_true_false == Phuc_no_valid)
       {
         real_data = 0;
         // hien thi thong bao No valid message found tren Qt
-//        sprintf(message, "No valid message because %d", check_true_false);
-//        HAL_UART_Transmit_DMA(&huart1, (uint8_t *)message, strlen(message));
+        //        sprintf(message, "No valid message because %d", check_true_false);
+        //        HAL_UART_Transmit_DMA(&huart1, (uint8_t *)message, strlen(message));
       }
-      else if (check_true_false == -2)
+      else if (check_true_false == Phuc_false_CRC)
       {
         real_data = 0;
-//        sprintf(message, "Invalid CRC because %d", check_true_false);
-//        HAL_UART_Transmit_DMA(&huart1, (uint8_t *)message, strlen(message));
+        //        sprintf(message, "Invalid CRC because %d", check_true_false);
+        //        HAL_UART_Transmit_DMA(&huart1, (uint8_t *)message, strlen(message));
         // hien thi Invalid CRC tren Qt
       }
-      else if (check_true_false == -3)
+      else if (check_true_false == Phuc_buffer_small)
       {
         real_data = 0;
-//        sprintf(message, "Destination buffer too small because %d", check_true_false);
-//        HAL_UART_Transmit_DMA(&huart1, (uint8_t *)message, strlen(message));
+        //        sprintf(message, "Destination buffer too small because %d", check_true_false);
+        //        HAL_UART_Transmit_DMA(&huart1, (uint8_t *)message, strlen(message));
         // hien thi Destination buffer too small tren Qt
+      }
+      else if (check_true_false == Phuc_false_lenght_data)
+      {
+        real_data = 0;
       }
       if (real_data == 1)
       {
@@ -602,14 +688,15 @@ int main(void)
           {
             //  checkModeFromQt = string_cut_checkMode(data_after_cut);
             setpointQt = *((float *)(data_after_cut + 1));
-            checkModeFromQt = 1;
+            checkModeFromQt = 1; // position
+            //htim3.Init.Period = 999;
             break;
           }
           else if (data_after_cut[0] == 0x33) // 'S' la set a' :))
           {
-
             setpointQt = *((float *)(data_after_cut + 1));
-            checkModeFromQt = 2;
+            checkModeFromQt = 2; // velocity
+            //htim3.Init.Period = 1999;
             break;
           }
           else if (data_after_cut[0] == 0x55) // G la GOOOO!!! a' :)), nhap nut RUN trong GUI thi gửi chữ 'G'
@@ -627,6 +714,23 @@ int main(void)
             Ki_true = *((float *)(data_after_cut + 5));
             Kd_true = *((float *)(data_after_cut + 9));
             break;
+          }
+          else if (data_after_cut[0] == 0x88) // choose mode PID1 or PID2
+          {
+            if (*((float *)(data_after_cut + 1)) == 1) // PID1
+            {
+              choose_PID = Select_PID1;
+              break;
+            }
+            else if (*((float *)(data_after_cut + 1)) == 2) // PID2
+            {
+              choose_PID = Select_PID2;
+              break;
+            }
+            else
+            {
+              break;
+            }
           }
           else if (data_after_cut[0] == 0x44)
           {
@@ -756,7 +860,7 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 63;
+  htim1.Init.Prescaler = 639;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim1.Init.Period = 999;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
