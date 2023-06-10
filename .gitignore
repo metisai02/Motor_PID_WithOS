@@ -1,2 +1,6 @@
 Debug/
 .settings/
+.cproject/
+.mxproject/
+PID_Myself Debug.launch/
+STM32F103C8TX_FLASH.ld/
