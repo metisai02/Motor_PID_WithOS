@@ -36,7 +36,8 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-
+#define Pulseee 1320.0f
+#define Ts 0.01
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
